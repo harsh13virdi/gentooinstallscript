@@ -1,0 +1,160 @@
+#!/bin/sh
+
+# == MY GENTOO SETUP INSTALLER == #
+#part1
+
+echo "Welcome to Gentoo Linux installer script!"
+
+# Printing out conneted drives and asking which drive to partition and how, then mounting them.
+lsblk
+echo "Enter the drive you want to install the OS on: "
+read drive
+cfdisk $drive
+echo "Enter the partition for your boot: "
+read bootpartition
+mkfs.fat -F 32 $bootpartition
+echo "Enter the partition for your swap: "
+read swappartition
+mkswap $swappartition
+swapon $swappartition
+echo "Enter the partition for your rootfs: "
+read rootpartition
+mkfs.ext4 $rootpartition
+
+mkdir /mnt/gentoo
+
+mount $rootpartition /mnt/gentoo
+cd /mnt/gentoo
+wget -r --accept-regex='current\-stage3\-amd64\-hardened\-openrc\/stage3\-amd64\-hardened\-openrc\-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][A-Z][0-9][0-9][0-9][0-9][0-9][0-9][A-Z]\.tar\.xz' https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-hardened-openrc/
+tar xpvf stage3*.tar.xz --xattrs-include='*.*' --numeric-owner
+rm -rf *.tar.xz
+cd /mnt/gentoo/etc/portage
+wget https://raw.githubusercontent.com/gentoo/portage/master/cnf/make.conf.example
+rm -rf ./make.conf
+mv make.conf.example make.conf
+
+sed -i "s/^#USE=\"X gtk gnome -alsa\"$/USE=\"-gtk -gnome -systemd -qt4 X device-mapper elogind\"/" ./make.conf
+sed -i "s/^#CFLAGS=\"-O2 -pipe\"$/CFLAGS=\"-march=native -O2 -pipe\"/" ./make.conf
+sed -i "s/^#CXXFLAGS=\"\${CFLAGS}\"$/CXXFLAGS=\"\${CFLAGS}\"/" ./make.conf
+sed -i "s/^#FFLAGS=\"\${CFLAGS}\"$/FFLAGS=\"\${CFLAGS}\"/" ./make.conf
+sed -i "s/^#FCFLAGS=\"\${FFLAGS}\"$/FCFLAGS=\"\${FFLAGS}\"/" ./make.conf
+sed -i "s/^#ACCEPT_LICENSE=\"* -@EULA\"$/ACCEPT_LICENSE=\"* -@EULA\"/" ./make.conf
+sed -i "s/^#EMERGE_DEFAULT_OPTS=\"\"$/EMERGE_DEFAULT_OPTS=\"--ask\"/" ./make.conf
+sed -i "s/^#MAKEOPTS=\"-j2\"$/MAKEOPTS=\"-j5\"/" ./make.conf
+sed -i "s/^#AUTOCLEAN=\"yes\"$/AUTOCLEAN=\"yes\"/" ./make.conf
+
+echo "LC_MESSAGES=C.utf8" >> ./make.conf
+echo "GRUB_PLATFORMS=\"efi-64\"" >> ./make.conf
+
+cd /mnt/gentoo
+mkdir --parents etc/portage/repos.conf
+cp usr/share/portage/config/repos.conf etc/portage/repos.conf/gentoo.conf
+cp --dereference /etc/resolv.conf etc/
+
+mount --types proc /proc proc
+mount --rbind /sys sys
+mount --make-rslave sys
+mount --rbind /dev dev
+mount --make-rslave dev
+
+# Generating the second part of the script from the current one and then chrooting into our live installion and executing the new script.
+sed '1,/^#part2$/d' `basename $0` > /mnt/gentoo/arch_install2.sh
+chmod +x /mnt/gentoo/arch_install2.sh
+chroot /mnt/gentoo ./arch_install2.sh
+exit
+
+#part2
+
+# Setting up locales keymap and language settings 
+source /etc/profile
+echo "Enter the partition for your boot: "
+read bootpartition
+mount $bootpartition /boot
+emerge-webrsync
+emerge --verbose --update --deep --newuse @world
+emerge -q app-editors/vim
+echo "Asia/Kolkata" > /etc/timezone
+echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
+eselect locale list
+echo "Select your locale: "
+read choice
+eselect locale set $choice
+env-update && source /etc/profile
+emerge -q --autounmask-continue sys-kernel/gentoo-sources genkernel
+
+ls /usr/src/linu*
+echo "Enter the complete path where gentoo-sources recides: "
+read choice
+cd $choice
+make menuconfig
+make && make modules_install && make install
+genkernel --install --kernel-config=./.config initramfs
+
+# Setting up system name hosts bootloader and the users
+echo "Hostname: "
+read hostname
+echo $hostname > /etc/conf.d/hostname
+emerge --noreplace --quiet net-misc/netifrc
+ifconfig
+echo "Enter the name of yout network interface: "
+read choice
+echo 'config_$choice="dhcp"' > /etc/conf.d/net
+emerge net-misc/dhcpcd
+cd /etc/init.d
+ln -s net.lo net.$choice
+rc-update add net.$choice default
+
+emerge --verbose sys-boot/grub:2
+grub-install --target=x86_64-efi --efi-directory=/boot
+grub-mkconfig -o /boot/grub/grub.cfg
+
+echo "Enter name of your boot partition: "
+read boot
+bootUUID="blkid -s UUID -o value $boot"
+echo "$bootUUID /boot/efi vfat defaults 0 2" >> /etc/fstab
+
+echo "Enter name of your swap partition: "
+read swap
+swapUUID="blkid -s UUID -o value $swap"
+echo "$swapUUID none swap sw 0 0" >> /etc/fstab
+
+echo "Enter name of your root partition: "
+read root
+rootUUID="blkid -s UUID -o value $root"
+echo "$rootUUID / ext4 noatime 0 1" >> /etc/fstab
+
+emerge -q app-admin/sudo
+
+emerge -q --autounmask-continue x11-libs/libX11 x11-base/xorg-drivers x11-base/xorg-server x11-libs/libXrandr x11-libs/libXinerama x11-libs/libXft x11-apps/xinit x11-apps/xrdb x11-apps/xrandr
+
+passwd
+echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+echo "Enter Username: "
+read username
+useradd -m -g users -G wheel -s /bin/bash $username
+passwd $username
+
+ai3_path=/home/$username/arch_install3.sh
+sed '1,/^#part3$/d' /arch_install2.sh > $ai3_path
+chown $username:users $ai3_path
+chmod +x $ai3_path
+
+echo "Pre-Installation Finish Reboot now"
+
+exit
+
+#part3
+
+# Installing programs 
+sudo emerge net-libs/webkit-gtk dev-vcs/git media-gfx/sxiv app-office/calcurse media-video/mpv www-client/firefox media-video/ffmpeg app=shells/fzf media-gfx/feh dev-python/pip net-misc/yt-dlp x11-misc/xclip media-gfx/maim x11-misc/dunst mail-client/aerc media-gfx/blender net-misc/curl media-video/ffmpegthumbnailer sys-process/htop media-gfx/krita media-sound/mpc media-sound/mpd media-sound/ncmpcpp media-video/obs-studio sys-apps/plocate app-misc/ranger net-misc/rsync net-misc/openssh media-gfx/ueberzug x11-misc/xbindkeys media-fonts/terminus-font
+
+source .bashrc
+
+mkdir ~/.vim/undodir -p
+git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
+vim +PluginInstall +qall
+
+pip install rnnoise-cli spotdl
+
+exit
