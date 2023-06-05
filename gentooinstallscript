@@ -44,7 +44,7 @@ sed -i "s/^#EMERGE_DEFAULT_OPTS=\"\"$/EMERGE_DEFAULT_OPTS=\"--ask\"/" ./make.con
 sed -i "s/^#MAKEOPTS=\"-j2\"$/MAKEOPTS=\"-j5 -l5\"/" ./make.conf
 sed -i "s/^#AUTOCLEAN=\"yes\"$/AUTOCLEAN=\"yes\"/" ./make.conf
 
-echo "ACCEPT_LICENSE=\"\* -\@EULA\"" >> ./make.conf
+echo "ACCEPT_LICENSE=\"* -@EULA\"" >> ./make.conf
 echo "PORTAGE_NICENESS=1" >> ./make.conf
 echo "EMERGE_DEFAULT_OPTS=\"--jobs=5 --load-average=5\"" >> ./make.conf
 echo "VIDEO_CARDS=\"intel\"" >> ./make.conf
