@@ -26,8 +26,10 @@ mkdir /mnt/gentoo
 mount $rootpartition /mnt/gentoo
 cd /mnt/gentoo
 wget -r --accept-regex='current\-stage3\-amd64\-hardened\-openrc\/stage3\-amd64\-hardened\-openrc\-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][A-Z][0-9][0-9][0-9][0-9][0-9][0-9][A-Z]\.tar\.xz' https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-hardened-openrc/
+mv /mnt/gentoo/distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-hardened-openrc/*tar.xz /mnt/gentoo
 tar xpvf stage3*.tar.xz --xattrs-include='*.*' --numeric-owner
 rm -rf *.tar.xz
+rm -rf /mnt/gentoo/distfiles.gentoo.org
 cd /mnt/gentoo/etc/portage
 wget https://raw.githubusercontent.com/gentoo/portage/master/cnf/make.conf.example
 rm -rf ./make.conf
@@ -38,13 +40,13 @@ sed -i "s/^#CFLAGS=\"-O2 -pipe\"$/CFLAGS=\"-march=native -O2 -pipe\"/" ./make.co
 sed -i "s/^#CXXFLAGS=\"\${CFLAGS}\"$/CXXFLAGS=\"\${CFLAGS}\"/" ./make.conf
 sed -i "s/^#FFLAGS=\"\${CFLAGS}\"$/FFLAGS=\"\${CFLAGS}\"/" ./make.conf
 sed -i "s/^#FCFLAGS=\"\${FFLAGS}\"$/FCFLAGS=\"\${FFLAGS}\"/" ./make.conf
-sed -i "s/^#ACCEPT_LICENSE=\"* -@EULA\"$/ACCEPT_LICENSE=\"* -@EULA\"/" ./make.conf
 sed -i "s/^#EMERGE_DEFAULT_OPTS=\"\"$/EMERGE_DEFAULT_OPTS=\"--ask\"/" ./make.conf
 sed -i "s/^#MAKEOPTS=\"-j2\"$/MAKEOPTS=\"-j5\"/" ./make.conf
 sed -i "s/^#AUTOCLEAN=\"yes\"$/AUTOCLEAN=\"yes\"/" ./make.conf
 
 echo "LC_MESSAGES=C.utf8" >> ./make.conf
 echo "GRUB_PLATFORMS=\"efi-64\"" >> ./make.conf
+echo "ACCEPT_LICENSE=\"\* -\@EULA\"" ./make.conf
 
 cd /mnt/gentoo
 mkdir --parents etc/portage/repos.conf
@@ -58,9 +60,9 @@ mount --rbind /dev dev
 mount --make-rslave dev
 
 # Generating the second part of the script from the current one and then chrooting into our live installion and executing the new script.
-sed '1,/^#part2$/d' `basename $0` > /mnt/gentoo/arch_install2.sh
-chmod +x /mnt/gentoo/arch_install2.sh
-chroot /mnt/gentoo ./arch_install2.sh
+sed '1,/^#part2$/d' "$(basename "$0")" > /mnt/gentoo/gentooinstall2.sh
+chmod +x /mnt/gentoo/gentooinstall2.sh
+chroot /mnt/gentoo ./gentooinstall2.sh
 exit
 
 #part2
@@ -83,10 +85,13 @@ eselect locale set $choice
 env-update && source /etc/profile
 emerge -q --autounmask-continue sys-kernel/gentoo-sources genkernel
 
-ls /usr/src/linu*
-echo "Enter the complete path where gentoo-sources recides: "
-read choice
-cd $choice
+if [[ -d /usr/src/linux ]] ; then
+cd /usr/src/linux
+else
+mv /usr/src/linux* /usr/src/linux
+cd /usr/src/linux
+fi
+
 make menuconfig
 make && make modules_install && make install
 genkernel --install --kernel-config=./.config initramfs
@@ -94,12 +99,12 @@ genkernel --install --kernel-config=./.config initramfs
 # Setting up system name hosts bootloader and the users
 echo "Hostname: "
 read hostname
-echo $hostname > /etc/conf.d/hostname
+echo "hostname=\"$hostname\"" > /etc/conf.d/hostname
 emerge --noreplace --quiet net-misc/netifrc
 ifconfig
 echo "Enter the name of yout network interface: "
 read choice
-echo 'config_$choice="dhcp"' > /etc/conf.d/net
+echo "config_$choice=\"dhcp\"" > /etc/conf.d/net
 emerge net-misc/dhcpcd
 cd /etc/init.d
 ln -s net.lo net.$choice
@@ -111,17 +116,17 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 echo "Enter name of your boot partition: "
 read boot
-bootUUID="blkid -s UUID -o value $boot"
+bootUUID="$(blkid -s UUID -o value $boot)"
 echo "$bootUUID /boot/efi vfat defaults 0 2" >> /etc/fstab
 
 echo "Enter name of your swap partition: "
 read swap
-swapUUID="blkid -s UUID -o value $swap"
+swapUUID="$(blkid -s UUID -o value $swap)"
 echo "$swapUUID none swap sw 0 0" >> /etc/fstab
 
 echo "Enter name of your root partition: "
 read root
-rootUUID="blkid -s UUID -o value $root"
+rootUUID="$(blkid -s UUID -o value $root)"
 echo "$rootUUID / ext4 noatime 0 1" >> /etc/fstab
 
 emerge -q app-admin/sudo
@@ -135,10 +140,10 @@ read username
 useradd -m -g users -G wheel -s /bin/bash $username
 passwd $username
 
-ai3_path=/home/$username/arch_install3.sh
-sed '1,/^#part3$/d' /arch_install2.sh > $ai3_path
-chown $username:users $ai3_path
-chmod +x $ai3_path
+gi3_path=/home/$username/gentooinstall3.sh
+sed '1,/^#part3$/d' /gentooinstall2.sh > $gi3_path
+chown $username:users $gi3_path
+chmod +x $gi3_path
 
 echo "Pre-Installation Finish Reboot now"
 
