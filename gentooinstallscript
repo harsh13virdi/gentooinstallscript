@@ -41,12 +41,16 @@ sed -i "s/^#CXXFLAGS=\"\${CFLAGS}\"$/CXXFLAGS=\"\${CFLAGS}\"/" ./make.conf
 sed -i "s/^#FFLAGS=\"\${CFLAGS}\"$/FFLAGS=\"\${CFLAGS}\"/" ./make.conf
 sed -i "s/^#FCFLAGS=\"\${FFLAGS}\"$/FCFLAGS=\"\${FFLAGS}\"/" ./make.conf
 sed -i "s/^#EMERGE_DEFAULT_OPTS=\"\"$/EMERGE_DEFAULT_OPTS=\"--ask\"/" ./make.conf
-sed -i "s/^#MAKEOPTS=\"-j2\"$/MAKEOPTS=\"-j5\"/" ./make.conf
+sed -i "s/^#MAKEOPTS=\"-j2\"$/MAKEOPTS=\"-j5 -l5\"/" ./make.conf
 sed -i "s/^#AUTOCLEAN=\"yes\"$/AUTOCLEAN=\"yes\"/" ./make.conf
 
+echo "ACCEPT_LICENSE=\"\* -\@EULA\"" >> ./make.conf
+echo "PORTAGE_NICENESS=1" >> ./make.conf
+echo "EMERGE_DEFAULT_OPTS=\"--jobs=5 --load-average=5\"" >> ./make.conf
+echo "VIDEO_CARDS=\"intel\"" >> ./make.conf
 echo "LC_MESSAGES=C.utf8" >> ./make.conf
 echo "GRUB_PLATFORMS=\"efi-64\"" >> ./make.conf
-echo "ACCEPT_LICENSE=\"\* -\@EULA\"" ./make.conf
+echo "GENTOO_MIRRORS=\"	https://download.nus.edu.sg/mirror/gentoo/ 	http://download.nus.edu.sg/mirror/gentoo/\"" >> ./make.conf
 
 cd /mnt/gentoo
 mkdir --parents etc/portage/repos.conf
